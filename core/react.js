@@ -34,3 +34,11 @@ export const render = (el, container) => {
 
   container.appendChild(dom)
 }
+
+const React = {
+  createElement,
+  createText,
+  render
+}
+
+export default React
