@@ -42,11 +42,13 @@ export const render = (el: VDOMElement, container: HTMLElement): void => {
     },
     container
   )
+  root = nextWorOfUnit
   // 推入构造环节
   requestIdleCallback(workLoop)
 }
 
 let nextWorOfUnit: null | Fiber = null
+let root: Fiber | null = null
 const workLoop: IdleRequestCallback = (deadline) => {
   let shouldYield = false
 
@@ -54,6 +56,12 @@ const workLoop: IdleRequestCallback = (deadline) => {
     // * 一边构建链表，一边构造dom
     nextWorOfUnit = performWorkOfUnit(nextWorOfUnit)
     shouldYield = deadline.timeRemaining() < 1
+  }
+
+  // * 统一提交
+  // * 只需要提交一次，随后不需要提交了，所以 root 需要在本次提交后，设置为 null
+  if (!nextWorOfUnit && root) {
+    commitRoot(root)
   }
   requestIdleCallback(workLoop)
 }
@@ -92,6 +100,24 @@ const bindFiberTree = (fiber: Fiber) => {
   })
 }
 
+const commitRoot = (fiber: Fiber) => {
+  commitWork(fiber.child)
+  // * 提交完成后， 设置为 null
+  root = null
+}
+
+// * 递归进去 提交 child 和 sibling
+const commitWork = (fiber: Fiber | null) => {
+  if (!fiber) {
+    return
+  }
+  // @ts-expect-error Text does't have this method
+  fiber.parent?.dom?.append(dom)
+
+  commitWork(fiber.child)
+  commitWork(fiber.sibling)
+}
+
 const performWorkOfUnit = (fiber: Fiber) => {
   const { type, props } = fiber
 
@@ -99,8 +125,6 @@ const performWorkOfUnit = (fiber: Fiber) => {
   // * 如果 dom 存在，则代表是 入口container，不需要创建，开始处理子节点即可
   if (!fiber.dom) {
     const dom = (fiber.dom = createDom(type))
-    // @ts-expect-error Text does't have this method
-    fiber.parent?.dom?.append(dom)
     // * 处理 props
     updateProps(props, dom)
   }
