@@ -1,8 +1,16 @@
 import React from '../core/react'
 
-const App = <div id="hello">hello m-react<h1>hello<h2>world</h2></h1></div>
+const Counter = ({ num, title }: { num: number, title?: string }) => {
+  return <div>counter{num}{title}</div>
+}
 
-console.log(App);
-
+const Counter2 = () => <div><Counter num={20} /></div>
+const App = () => (
+  <div id="hello">
+    hello m-react
+    <Counter num={10} title='hello world' />
+    <Counter2 />
+  </div>
+)
 
 export default App
