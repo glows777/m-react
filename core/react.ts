@@ -85,7 +85,7 @@ const updateProps = (props: PropsType, dom: HTMLElement | Text) => {
 const bindFiberTree = (fiber: Fiber, children: ChildType[]) => {
   let prevChild: Fiber | null = null
   children.forEach((child, index) => {
-    if (typeof child !== 'string') {
+    if (child && typeof child !== 'string') {
       // * 创建新的 fiber 节点
       const newFiber = new Fiber({
         ...transformVdomToFiber(child, null),
@@ -127,20 +127,33 @@ const commitWork = (fiber: Fiber | null) => {
   commitWork(fiber.sibling)
 }
 
-const performWorkOfUnit = (fiber: Fiber) => {
+const updateFunctionComponent = (fiber: Fiber) => {
+  const children: ChildType[] = [(fiber.type as Function)(fiber.props)]
+  return children
+}
+const updateHostComponent = (fiber: Fiber) => {
   const { type, props } = fiber
-  const isFunctionComponent = typeof fiber.type === 'function'
-  // * 1. 创建 dom & 处理 propss
-  // * 如果 dom 存在，则代表是 入口container，不需要创建，开始处理子节点即可
-  if (!fiber.dom && !isFunctionComponent) {
+  if (!fiber.dom) {
     const dom = (fiber.dom = createDom(type))
     // * 处理 props
     updateProps(props, dom)
   }
+  const children: ChildType[] = fiber.props.children
+
+  return children
+}
+
+const performWorkOfUnit = (fiber: Fiber) => {
+  const isFunctionComponent = typeof fiber.type === 'function'
+  // * 1. 创建 dom & 处理 propss
+  // * 如果 dom 存在，则代表是 入口container，不需要创建，开始处理子节点即可
+  let children: ChildType[]
+  if (isFunctionComponent) {
+    children = updateFunctionComponent(fiber)
+  } else {
+    children = updateHostComponent(fiber)
+  } 
   // * 2. 绑定 指针指向
-  const children: ChildType[] = isFunctionComponent
-    ? [(fiber.type as Function)(fiber.props)]
-    : fiber.props.children
   bindFiberTree(fiber, children)
 
   // * 3. 返回
