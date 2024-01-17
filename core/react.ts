@@ -1,6 +1,7 @@
 import { Fiber, transformVdomToFiber } from './fiber'
 
-export type ElementType = string | Function
+export type FunctionElementType = (props: PropsType) => VDOMElement
+export type ElementType = string | FunctionElementType
 export type PropsType = Record<string, any> & { children: ChildType[] }
 export type ChildType = VDOMElement | string
 export type VDOMElement = {
@@ -128,7 +129,7 @@ const commitWork = (fiber: Fiber | null) => {
 }
 
 const updateFunctionComponent = (fiber: Fiber) => {
-  const children: ChildType[] = [(fiber.type as Function)(fiber.props)]
+  const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
   return children
 }
 const updateHostComponent = (fiber: Fiber) => {
