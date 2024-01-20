@@ -78,6 +78,10 @@ const createDom = (type: ElementType) => {
 const updateProps = (props: PropsType, dom: HTMLElement | Text) => {
   Object.keys(props).forEach((k) => {
     if (k !== 'children') {
+      if (k.startsWith('on')) {
+        const eventName = k.slice(2).toLowerCase()
+        dom.addEventListener(eventName, props[k])
+      }
       ;(dom as any)[k] = props[k]
     }
   })
