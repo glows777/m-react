@@ -1,4 +1,11 @@
 import { PropsType, VDOMElement, ElementType } from './react'
+
+export enum Tag {
+  // * 创建阶段
+  PLACEMENT = 'PLACEMENT',
+  // * 更新阶段
+  UPDATE = 'UPDATE'
+}
 export class Fiber {
   // * dom 节点类型
   type: ElementType = ''
@@ -11,13 +18,17 @@ export class Fiber {
   // * dom
   dom: HTMLElement | Text | null = null
   props: PropsType
-  constructor({ type, parent, sibling, child, dom, props }: Fiber) {
+  alternate: Fiber | null = null
+  tag: Tag = Tag.PLACEMENT
+  constructor({ type, parent, sibling, child, dom, props, alternate, tag }: Fiber) {
     this.type = type
     this.child = child
     this.sibling = sibling
     this.parent = parent
     this.dom = dom
     this.props = props
+    this.alternate = alternate
+    this.tag = tag
   }
 }
 
@@ -43,5 +54,7 @@ export const transformVdomToFiber = (
     sibling: null,
     parent: null,
     props: vdom.props,
+    alternate: null,
+    tag: Tag.PLACEMENT
   })
 }

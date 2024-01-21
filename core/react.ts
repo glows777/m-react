@@ -1,4 +1,4 @@
-import { Fiber, transformVdomToFiber } from './fiber'
+import { Fiber, Tag, transformVdomToFiber } from './fiber'
 
 export type FunctionElementType = (props: PropsType) => VDOMElement
 export type ElementType = string | FunctionElementType
@@ -46,28 +46,38 @@ export const render = (el: VDOMElement, container: HTMLElement): void => {
     },
     container
   )
-  root = nextWorOfUnit
+  wipRoot = nextWorOfUnit
   // 推入构造环节
   requestIdleCallback(workLoop)
 }
 
 let nextWorOfUnit: null | Fiber = null
-let root: Fiber | null = null
+let wipRoot: Fiber | null = null
+let currentRoot: Fiber | null = null
 const workLoop: IdleRequestCallback = (deadline) => {
   let shouldYield = false
-
   while (!shouldYield && nextWorOfUnit) {
     // * 一边构建链表，一边构造dom
     nextWorOfUnit = performWorkOfUnit(nextWorOfUnit)
     shouldYield = deadline.timeRemaining() < 1
   }
 
-  // * 统一提交
+  // * 统一提交 dom 更新
   // * 只需要提交一次，随后不需要提交了，所以 root 需要在本次提交后，设置为 null
-  if (!nextWorOfUnit && root) {
-    commitRoot(root)
+  if (!nextWorOfUnit && wipRoot) {
+    commitRoot(wipRoot)
   }
   requestIdleCallback(workLoop)
+}
+
+export const update = () => {
+  wipRoot = new Fiber({
+    ...currentRoot!,
+    dom: currentRoot!.dom,
+    props: currentRoot!.props,
+    alternate: currentRoot,
+  })
+  nextWorOfUnit = wipRoot
 }
 
 const createDom = (type: ElementType) => {
@@ -75,27 +85,63 @@ const createDom = (type: ElementType) => {
     ? document.createTextNode('')
     : document.createElement(type as string)
 }
-const updateProps = (props: PropsType, dom: HTMLElement | Text) => {
-  Object.keys(props).forEach((k) => {
-    if (k !== 'children') {
-      if (k.startsWith('on')) {
-        const eventName = k.slice(2).toLowerCase()
-        dom.addEventListener(eventName, props[k])
+const updateProps = (dom: HTMLElement | Text, nextProps: PropsType, prevProps?: PropsType) => {
+  // * 1. old 有， new 没有 -> 删除
+  if (prevProps) {
+    Object.keys(prevProps).forEach((k) => {
+      if (k !== 'children') {
+        if (!(k in nextProps)) {
+          (dom as HTMLElement).removeAttribute(k)
+        }
       }
-      ;(dom as any)[k] = props[k]
+    })
+  }
+  // * 2. old 没有， new 有 -> 添加
+  // * 3. old 有， new 有 -> 替换
+  Object.keys(nextProps).forEach(k => {
+    if (k !== 'children') {
+      if (prevProps?.[k] !== nextProps[k]) {
+        if (k.startsWith("on")) {
+          const eventType = k.slice(2).toLowerCase();
+          dom.removeEventListener(eventType, prevProps?.[k]);
+          dom.addEventListener(eventType, nextProps[k]);
+        } else {
+          (dom as any)[k] = nextProps[k]
+        }
+      }
     }
   })
 }
 
-const bindFiberTree = (fiber: Fiber, children: ChildType[]) => {
+const reconcileChildren = (fiber: Fiber, children: ChildType[]) => {
   let prevChild: Fiber | null = null
+  let oldFiber = fiber.alternate?.child
   children.forEach((child, index) => {
     if (child && typeof child !== 'string') {
-      // * 创建新的 fiber 节点
-      const newFiber = new Fiber({
-        ...transformVdomToFiber(child, null),
-        parent: fiber,
-      })
+
+      // * 如果标签类型相同，则代表是 更新阶段
+      const isSameType = oldFiber && oldFiber.type === child.type
+      let newFiber: Fiber
+
+      if (isSameType) {
+        newFiber = new Fiber({
+          ...transformVdomToFiber(child, oldFiber!.dom),
+          tag: Tag.UPDATE,
+          alternate: oldFiber!,
+          parent: fiber,
+        })
+      } else {
+        // * 创建新的 fiber 节点
+        newFiber = new Fiber({
+          ...transformVdomToFiber(child, null),
+          parent: fiber,
+        })
+      }
+
+      if (oldFiber) {
+        oldFiber = oldFiber.sibling
+      }
+
       // * 第一个节点，那么，父节点的 child 应该指向她
       // * 否则， 则前序节点的 sibling 指向当前节点
       if (index === 0) {
@@ -111,7 +157,8 @@ const bindFiberTree = (fiber: Fiber, children: ChildType[]) => {
 const commitRoot = (fiber: Fiber) => {
   commitWork(fiber.child)
   // * 提交完成后， 设置为 null
-  root = null
+  currentRoot = wipRoot
+  wipRoot = null
 }
 
 // * 递归进去 提交 child 和 sibling
@@ -123,10 +170,17 @@ const commitWork = (fiber: Fiber | null) => {
   while (parent && !parent.dom) {
     parent = parent.parent
   }
-  if (fiber.dom) {
-    // @ts-expect-error Text does't have this method
-    parent?.dom?.append(fiber.dom)
+
+  if (fiber.tag === Tag.PLACEMENT) {
+    if (fiber.dom) {
+      // @ts-expect-error Text does't have this method
+      parent?.dom?.append(fiber.dom)
+    }
+  } else {
+    // * 更新阶段不需要创建 dom，只需要更新 props 等修改dom
+    updateProps(fiber.dom!, fiber.props, fiber.alternate?.props)
   }
+
 
   commitWork(fiber.child)
   commitWork(fiber.sibling)
@@ -141,7 +195,9 @@ const updateHostComponent = (fiber: Fiber) => {
   if (!fiber.dom) {
     const dom = (fiber.dom = createDom(type))
     // * 处理 props
-    updateProps(props, dom)
+    updateProps(dom, props, {
+      children: []
+    })
   }
   const children: ChildType[] = fiber.props.children
 
@@ -150,16 +206,16 @@ const updateHostComponent = (fiber: Fiber) => {
 
 const performWorkOfUnit = (fiber: Fiber) => {
   const isFunctionComponent = typeof fiber.type === 'function'
-  // * 1. 创建 dom & 处理 propss
+  // * 1. 创建 dom & 处理 props
   // * 如果 dom 存在，则代表是 入口container，不需要创建，开始处理子节点即可
   let children: ChildType[]
   if (isFunctionComponent) {
     children = updateFunctionComponent(fiber)
   } else {
     children = updateHostComponent(fiber)
-  } 
-  // * 2. 绑定 指针指向
-  bindFiberTree(fiber, children)
+  }
+  // * 2. 绑定 指针指向, 构建 fiber 树
+  reconcileChildren(fiber, children)
 
   // * 3. 返回
   // * 此时的优先级为
