@@ -37,7 +37,7 @@ export const createText = (text: string): VDOMElement => ({
 })
 
 export const render = (el: VDOMElement, container: HTMLElement): void => {
-  nextWorOfUnit = transformVdomToFiber(
+  nextWorkOfUnit = transformVdomToFiber(
     {
       type: () => el,
       props: {
@@ -46,38 +46,40 @@ export const render = (el: VDOMElement, container: HTMLElement): void => {
     },
     container
   )
-  wipRoot = nextWorOfUnit
+  wipRoot = nextWorkOfUnit
   // 推入构造环节
   requestIdleCallback(workLoop)
 }
 
-let nextWorOfUnit: null | Fiber = null
+let nextWorkOfUnit: null | Fiber = null
+// * work in process
 let wipRoot: Fiber | null = null
 let currentRoot: Fiber | null = null
+let deletions: Array<Fiber | null> = []
+let wipFiber: Fiber | null = null
 const workLoop: IdleRequestCallback = (deadline) => {
   let shouldYield = false
-  while (!shouldYield && nextWorOfUnit) {
+  while (!shouldYield && nextWorkOfUnit) {
     // * 一边构建链表，一边构造dom
-    nextWorOfUnit = performWorkOfUnit(nextWorOfUnit)
+    nextWorkOfUnit = performWorkOfUnit(nextWorkOfUnit)
+
+    // * 找到更新的边界点，也就是只需要更新当前 wipFiber ，其他节点不需要更新
+    // * wipRoot 就是当前需要更新的 fiber， nextWorkOfUnit下一个 workLoop 需要更新的 fiber
+    // * 这里的判断条件是，如果 wipRoot 的 sibling 和 nextWorkOfUnit 的 type 相同，则代表当前的 fiber 节点，及其子节点已经构建完毕，接下来是下一个 FC， 那么就不需要更新了
+    if (wipRoot?.sibling?.type === nextWorkOfUnit?.type) {
+      // * 设置为 null，下面会走到 commitRoot， 提交更新
+      nextWorkOfUnit = null
+    }
+
     shouldYield = deadline.timeRemaining() < 1
   }
 
   // * 统一提交 dom 更新
-  // * 只需要提交一次，随后不需要提交了，所以 root 需要在本次提交后，设置为 null
-  if (!nextWorOfUnit && wipRoot) {
+  // * 只需要提交一次，随后不需要提交了，所以 root 需要在本次提交后，设置为 null -> 在 commitRoot 中去设置
+  if (!nextWorkOfUnit && wipRoot) {
     commitRoot(wipRoot)
   }
   requestIdleCallback(workLoop)
-}
-
-export const update = () => {
-  wipRoot = new Fiber({
-    ...currentRoot!,
-    dom: currentRoot!.dom,
-    props: currentRoot!.props,
-    alternate: currentRoot,
-  })
-  nextWorOfUnit = wipRoot
 }
 
 const createDom = (type: ElementType) => {
@@ -112,7 +114,11 @@ const updateProps = (dom: HTMLElement | Text, nextProps: PropsType, prevProps?: 
     }
   })
 }
-
+// * 更新阶段的话，其实有三种情况
+// * 1. 新增节点，旧节点没有，新节点有
+// * 2. 删除节点，旧节点有，新节点没有
+// * 3. 更新节点，旧节点有，新节点有，但是不一样
+// * 其中，1， 3可以合并，因为本质都是更新，只不过新增的时候是旧节点可以理解我为undefined
 const reconcileChildren = (fiber: Fiber, children: ChildType[]) => {
   let prevChild: Fiber | null = null
   let oldFiber = fiber.alternate?.child
@@ -124,21 +130,26 @@ const reconcileChildren = (fiber: Fiber, children: ChildType[]) => {
       let newFiber: Fiber
 
       if (isSameType) {
+        // * 1， 3 如果标签类型相同，则代表是更新，应该复用旧的节点，然后更新 props -> 打上 UPDATE 标签
         newFiber = new Fiber({
           ...transformVdomToFiber(child, oldFiber!.dom),
           tag: Tag.UPDATE,
+          // * 这里是关键，指针指向 旧的节点
           alternate: oldFiber!,
           parent: fiber,
         })
       } else {
+        // * 1， 3 如果标签类型不同，则代表是更新，应该删除旧的节点，然后添加新的节点
         // * 创建新的 fiber 节点
         newFiber = new Fiber({
           ...transformVdomToFiber(child, null),
           parent: fiber,
         })
+        deletions.push(oldFiber!)
       }
 
       if (oldFiber) {
+        // * alternate 指向下一个兄弟节点
         oldFiber = oldFiber.sibling
       }
 
@@ -149,16 +160,43 @@ const reconcileChildren = (fiber: Fiber, children: ChildType[]) => {
       } else {
         prevChild!.sibling = newFiber
       }
-      prevChild = newFiber
+      if (newFiber) {
+        prevChild = newFiber
+      }
     }
   })
+
+  // * 2. 删除多余的 旧节点
+  while (oldFiber) {
+    deletions.push(oldFiber)
+    oldFiber = oldFiber.sibling
+  }
 }
 
 const commitRoot = (fiber: Fiber) => {
+  // * 统一删除
+  deletions.filter(Boolean).forEach(commitDeletion)
   commitWork(fiber.child)
   // * 提交完成后， 设置为 null
   currentRoot = wipRoot
   wipRoot = null
+  deletions = []
+}
+
+const commitDeletion = (fiber: Fiber | null) => {
+  if (fiber) {
+    if (fiber.dom) {
+      console.log('delete', fiber)
+      let parent = fiber.parent
+      while (parent && !parent.dom) {
+        parent = parent.parent
+      }
+      parent?.dom?.removeChild(fiber.dom)
+    } else {
+      commitDeletion(fiber.child)
+    }
+  }
+
 }
 
 // * 递归进去 提交 child 和 sibling
@@ -187,6 +225,8 @@ const commitWork = (fiber: Fiber | null) => {
 }
 
 const updateFunctionComponent = (fiber: Fiber) => {
+  // * 将当前的 fiber 赋值给 wipFiber， 以便在 update 函数中，可以通过 wipFiber 拿到当前的 fiber
+  wipFiber = fiber
   const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
   return children
 }
@@ -206,6 +246,7 @@ const updateHostComponent = (fiber: Fiber) => {
 
 const performWorkOfUnit = (fiber: Fiber) => {
   const isFunctionComponent = typeof fiber.type === 'function'
+
   // * 1. 创建 dom & 处理 props
   // * 如果 dom 存在，则代表是 入口container，不需要创建，开始处理子节点即可
   let children: ChildType[]
@@ -237,10 +278,29 @@ const performWorkOfUnit = (fiber: Fiber) => {
   return null
 }
 
+export const update = () => {
+
+  // * 这里采用闭包的方式，保存当前的 wipFiber
+  // * 因为在每一次的 workLoop 中，如果是 FC 的话， wipFiber 会被重新赋值 -> 最小的更新单元是一个 fiber -> 对应到我们写的代码就是一个 FC
+  // * 所以，这里需要利用闭包 保存当前的 wipFiber
+  // * 当调用这个方法的时候，我们才知道 更新的起点，直接从这个起点开始，构建新的 fiber 链表
+  const currentFiber = wipFiber
+  return () => {
+    wipRoot = new Fiber({
+      ...currentFiber!,
+      dom: currentFiber!.dom,
+      props: currentFiber!.props,
+      alternate: currentFiber,
+    })
+    nextWorkOfUnit = wipRoot
+  }
+}
+
 const React = {
   createElement,
   createText,
   render,
+  update
 }
 
 export default React

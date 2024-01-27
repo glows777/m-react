@@ -1,32 +1,63 @@
-import React, { update } from '../core/react'
+import React from '../core/react'
 
-let count = 10
-let data: Record<string, any> = {
-  id: 'hello'
+let countFoo = 1
+function Test() {
+  return <div>hello</div>
 }
-const Counter = ({ num, title }: { num: number, title?: string }) => {
-  const handelClick = () => {
-    count++
-    data = {
-      className: 'hello'
-    }
+function Foo() {
+  console.log("foo rerun")
+  const update = React.update()
+  function handleClick() {
+    countFoo++
     update()
   }
+
   return (
-    <div {...data}>
-      count: {count}
-      <button onClick={handelClick}>click</button>
-    </div >
+    <div>
+      <h1>foo</h1>
+      {countFoo}
+      <Test />
+      <button onClick={handleClick}>click</button>
+    </div>
+  );
+}
+
+let countBar = 1
+function Bar() {
+  console.log("bar rerun")
+  const update = React.update()
+  function handleClick() {
+    countBar++
+    update()
+  }
+
+  return (
+    <div>
+      <h1>bar</h1>
+      {countBar}
+      <button onClick={handleClick}>click</button>
+    </div>
+  );
+}
+
+let countRoot = 1;
+function App() {
+  console.log("app rerun")
+
+  const update = React.update()
+  function handleClick() {
+    countRoot++
+    update()
+  }
+
+  return (
+    <div>
+      hi-mini-react count: {countRoot}
+      <button onClick={handleClick}>click</button>
+      <Foo></Foo>
+      <Bar></Bar>
+    </div>
   )
 }
 
-const Counter2 = () => <div>hello</div>
-const App = () => (
-  <div id="hello">
-    hello m-react
-    <Counter num={10} title='hello world' />
-    <Counter2 />
-  </div>
-)
-
-export default App
+export default App;
