@@ -6,6 +6,12 @@ export enum Tag {
   // * 更新阶段
   UPDATE = 'UPDATE'
 }
+
+export type UpdateAction<T> = (prev: T) => T
+export interface Hook<T = any> {
+  state: T,
+  queue: Array<UpdateAction<T>>
+}
 export class Fiber {
   // * dom 节点类型
   type: ElementType = ''
@@ -20,7 +26,8 @@ export class Fiber {
   props: PropsType
   alternate: Fiber | null = null
   tag: Tag = Tag.PLACEMENT
-  constructor({ type, parent, sibling, child, dom, props, alternate, tag }: Fiber) {
+  stateHooks: Array<Hook>
+  constructor({ type, parent, sibling, child, dom, props, alternate, tag, stateHooks }: Fiber) {
     this.type = type
     this.child = child
     this.sibling = sibling
@@ -29,6 +36,7 @@ export class Fiber {
     this.props = props
     this.alternate = alternate
     this.tag = tag
+    this.stateHooks = stateHooks
   }
 }
 
@@ -55,6 +63,7 @@ export const transformVdomToFiber = (
     parent: null,
     props: vdom.props,
     alternate: null,
-    tag: Tag.PLACEMENT
+    tag: Tag.PLACEMENT,
+    stateHooks: []
   })
 }

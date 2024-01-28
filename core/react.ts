@@ -1,4 +1,5 @@
-import { Fiber, Tag, transformVdomToFiber } from './fiber'
+import { Update } from 'vite/types/hmrPayload.js'
+import { Fiber, Hook, Tag, UpdateAction, transformVdomToFiber } from './fiber'
 
 export type FunctionElementType = (props: PropsType) => VDOMElement
 export type ElementType = string | FunctionElementType
@@ -227,6 +228,9 @@ const commitWork = (fiber: Fiber | null) => {
 const updateFunctionComponent = (fiber: Fiber) => {
   // * 将当前的 fiber 赋值给 wipFiber， 以便在 update 函数中，可以通过 wipFiber 拿到当前的 fiber
   wipFiber = fiber
+  // * 清除 hook 树组，来到下一个 FC 的 HOOK 了
+  stateHooks = []
+  stateHooksIndex = 0
   const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
   return children
 }
@@ -296,11 +300,58 @@ export const update = () => {
   }
 }
 
+let stateHooks: Hook[] = []
+let stateHooksIndex = 0
+export const useState = <T>(initial: T) => {
+  const currentFiber = wipFiber!
+  // * 找到 之前旧 fiber 的 hook state
+  const oldHook = currentFiber?.alternate?.stateHooks[stateHooksIndex] as Hook<T>
+  const stateHook: Hook<T> = {
+    state: oldHook ? oldHook.state : initial,
+    queue: oldHook ? oldHook.queue : [],
+  }
+
+  // * 批量更新 state
+  stateHook.queue.forEach((action) => {
+    stateHook.state = action(stateHook.state)
+  })
+  stateHook.queue = []
+
+  stateHooksIndex++
+  stateHooks.push(stateHook)
+
+  // * 更新为最新的 hook state
+  currentFiber.stateHooks = stateHooks
+
+  function setState(action: ((prev: T) => T) | T) {
+
+    // * 如果没有传入的 action 执行后， state 没有发生改变，那么就不需要更新了，直接 return
+    const eagerState = typeof action === 'function' ? (action as UpdateAction<T>)(stateHook.state) : action
+    if (eagerState === stateHook.state) {
+      return
+    }
+
+    // * 先将 action 推入 queue 中，等待下一次更新时调用
+    stateHook.queue.push((typeof action === 'function' ? action : () => action) as any)
+    wipRoot = new Fiber({
+      ...currentFiber!,
+      dom: currentFiber!.dom,
+      props: currentFiber!.props,
+      alternate: currentFiber,
+    })
+
+    nextWorkOfUnit = wipRoot
+  }
+
+  return [stateHook.state, setState] as const
+}
+
 const React = {
   createElement,
   createText,
   render,
-  update
+  update,
+  useState
 }
 
 export default React
