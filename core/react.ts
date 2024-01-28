@@ -323,7 +323,7 @@ export const useState = <T>(initial: T) => {
   // * 更新为最新的 hook state
   currentFiber.stateHooks = stateHooks
 
-  function setState(action: ((prev: T) => T) | T) {
+  function setState(action: UpdateAction<T> | T) {
 
     // * 如果没有传入的 action 执行后， state 没有发生改变，那么就不需要更新了，直接 return
     const eagerState = typeof action === 'function' ? (action as UpdateAction<T>)(stateHook.state) : action
@@ -332,7 +332,7 @@ export const useState = <T>(initial: T) => {
     }
 
     // * 先将 action 推入 queue 中，等待下一次更新时调用
-    stateHook.queue.push((typeof action === 'function' ? action : () => action) as any)
+    stateHook.queue.push((typeof action === 'function' ? action : () => action) as UpdateAction<T>)
     wipRoot = new Fiber({
       ...currentFiber!,
       dom: currentFiber!.dom,
