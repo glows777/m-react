@@ -1,5 +1,5 @@
 import { Update } from 'vite/types/hmrPayload.js'
-import { Fiber, Hook, Tag, UpdateAction, transformVdomToFiber } from './fiber'
+import { EffectAction, EffectHook, Fiber, StateHook, Tag, UpdateAction, transformVdomToFiber } from './fiber'
 
 export type FunctionElementType = (props: PropsType) => VDOMElement
 export type ElementType = string | FunctionElementType
@@ -178,6 +178,7 @@ const commitRoot = (fiber: Fiber) => {
   // * 统一删除
   deletions.filter(Boolean).forEach(commitDeletion)
   commitWork(fiber.child)
+  commitEffectHook()
   // * 提交完成后， 设置为 null
   currentRoot = wipRoot
   wipRoot = null
@@ -225,11 +226,41 @@ const commitWork = (fiber: Fiber | null) => {
   commitWork(fiber.sibling)
 }
 
+const commitEffectHook = () => {
+  const run = (fiber: Fiber | null) => {
+    if (!fiber) {
+      return
+    }
+    if (!fiber.alternate) {
+      fiber.effectHooks.forEach((effectHook) => {
+        effectHook.callback()
+      })
+    } else {
+      if (fiber.effectHooks.length === 0) {
+        return
+      }
+      fiber.effectHooks.forEach((effectHook, index) => {
+        const { deps } = effectHook
+        const oldDeps = fiber.alternate!.effectHooks[index].deps
+        const isChanged = deps.some((dep, i) => dep !== oldDeps[i])
+        if (isChanged) {
+          effectHook.callback()
+        }
+      })
+    }
+    run(fiber.child)
+    run(fiber.sibling)
+  }
+
+  run(wipRoot)
+}
+
 const updateFunctionComponent = (fiber: Fiber) => {
   // * 将当前的 fiber 赋值给 wipFiber， 以便在 update 函数中，可以通过 wipFiber 拿到当前的 fiber
   wipFiber = fiber
   // * 清除 hook 树组，来到下一个 FC 的 HOOK 了
   stateHooks = []
+  effectHooks = []
   stateHooksIndex = 0
   const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
   return children
@@ -300,13 +331,13 @@ export const update = () => {
   }
 }
 
-let stateHooks: Hook[] = []
+let stateHooks: StateHook[] = []
 let stateHooksIndex = 0
 export const useState = <T>(initial: T) => {
   const currentFiber = wipFiber!
   // * 找到 之前旧 fiber 的 hook state
-  const oldHook = currentFiber?.alternate?.stateHooks[stateHooksIndex] as Hook<T>
-  const stateHook: Hook<T> = {
+  const oldHook = currentFiber?.alternate?.stateHooks[stateHooksIndex] as StateHook<T>
+  const stateHook: StateHook<T> = {
     state: oldHook ? oldHook.state : initial,
     queue: oldHook ? oldHook.queue : [],
   }
@@ -346,12 +377,25 @@ export const useState = <T>(initial: T) => {
   return [stateHook.state, setState] as const
 }
 
+let effectHooks: EffectHook[] = []
+export const useEffect = (callback: EffectAction, deps: any[]) => {
+  const effectHook: EffectHook = {
+    callback,
+    deps,
+  }
+  effectHooks.push(effectHook)
+  wipFiber!.effectHooks = effectHooks
+}
+
+
+
 const React = {
   createElement,
   createText,
   render,
   update,
-  useState
+  useState,
+  useEffect
 }
 
 export default React
