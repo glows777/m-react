@@ -12,15 +12,25 @@ function Foo() {
   useEffect(() => {
     console.log("effect foo")
     console.log(count)
+    return () => {
+      console.log("unmount foo")
+    }
   }, [count])
 
   useEffect(() => {
     console.log("effect bar")
     console.log(bar)
+
+    return () => {
+      console.log("unmount bar")
+    }
   }, [bar])
 
   useEffect(() => {
     console.log('init')
+    return () => {
+      console.log('unmount')
+    }
   }, [])
   return (
     <div>

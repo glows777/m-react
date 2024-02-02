@@ -1,4 +1,3 @@
-import { Update } from 'vite/types/hmrPayload.js'
 import { EffectAction, EffectHook, Fiber, StateHook, Tag, UpdateAction, transformVdomToFiber } from './fiber'
 
 export type FunctionElementType = (props: PropsType) => VDOMElement
@@ -233,7 +232,7 @@ const commitEffectHook = () => {
     }
     if (!fiber.alternate) {
       fiber.effectHooks.forEach((effectHook) => {
-        effectHook.callback()
+        effectHook.cleanup = effectHook.callback()
       })
     } else {
       if (fiber.effectHooks.length === 0) {
@@ -244,7 +243,7 @@ const commitEffectHook = () => {
         const oldDeps = fiber.alternate!.effectHooks[index].deps
         const isChanged = deps.some((dep, i) => dep !== oldDeps[i])
         if (isChanged) {
-          effectHook.callback()
+          effectHook.cleanup = effectHook.callback()
         }
       })
     }
@@ -252,6 +251,18 @@ const commitEffectHook = () => {
     run(fiber.sibling)
   }
 
+  const runCleanup = (fiber: Fiber | null) => {
+    if (!fiber) {
+      return
+    }
+    fiber.alternate?.effectHooks.forEach((effectHook) => {
+      effectHook.cleanup?.()
+    })
+    runCleanup(fiber.child)
+    runCleanup(fiber.sibling)
+  }
+
+  runCleanup(wipRoot)
   run(wipRoot)
 }
 
@@ -263,6 +274,7 @@ const updateFunctionComponent = (fiber: Fiber) => {
   effectHooks = []
   stateHooksIndex = 0
   const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
+  debugger
   return children
 }
 const updateHostComponent = (fiber: Fiber) => {

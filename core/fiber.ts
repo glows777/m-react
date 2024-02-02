@@ -15,7 +15,8 @@ export interface StateHook<T = any> {
 export type EffectAction = () => void | (() => void)
 export interface EffectHook {
   callback: EffectAction
-  deps: any[]
+  deps: any[],
+  cleanup?: (() => void) | void
 }
 export class Fiber {
   // * dom 节点类型
