@@ -30,5 +30,5 @@
 
 ## Last
 
-- 😻 this project is still remain numerous deficiencies, pr/issue welcomed!
+- 😻 this project still remains numerous deficiencies, pr/issue welcomed!
 - 😁 enjoy your life!
