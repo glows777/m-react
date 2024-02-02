@@ -1,63 +1,59 @@
-import React from '../core/react'
+import React, { useState, useEffect } from "../core/react"
 
-let countFoo = 1
-function Test() {
-  return <div>hello</div>
-}
 function Foo() {
-  console.log("foo rerun")
-  const update = React.update()
+  console.log("re foo")
+  const [count, setCount] = useState(10)
+  const [bar, setBar] = useState("bar")
   function handleClick() {
-    countFoo++
-    update()
+    setCount((c) => c + 1)
+    setBar(prev => prev + "bar")
   }
 
+  useEffect(() => {
+    console.log("effect foo")
+    console.log(count)
+    return () => {
+      console.log("unmount foo")
+    }
+  }, [count])
+
+  useEffect(() => {
+    console.log("effect bar")
+    console.log(bar)
+
+    return () => {
+      console.log("unmount bar")
+    }
+  }, [bar])
+
+  useEffect(() => {
+    console.log('init')
+    return () => {
+      console.log('unmount')
+    }
+  }, [])
   return (
     <div>
       <h1>foo</h1>
-      {countFoo}
-      <Test />
+      {count}
+      <div>{bar}</div>
       <button onClick={handleClick}>click</button>
-    </div>
-  );
-}
-
-let countBar = 1
-function Bar() {
-  console.log("bar rerun")
-  const update = React.update()
-  function handleClick() {
-    countBar++
-    update()
-  }
-
-  return (
-    <div>
-      <h1>bar</h1>
-      {countBar}
-      <button onClick={handleClick}>click</button>
-    </div>
-  );
-}
-
-let countRoot = 1;
-function App() {
-  console.log("app rerun")
-
-  const update = React.update()
-  function handleClick() {
-    countRoot++
-    update()
-  }
-
-  return (
-    <div>
-      hi-mini-react count: {countRoot}
-      <button onClick={handleClick}>click</button>
-      <Foo></Foo>
-      <Bar></Bar>
     </div>
   )
 }
 
-export default App;
+function App() {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    console.log(count)
+  }, [count])
+  return (
+    <div>
+      {count}<button onClick={() => setCount(prev => prev + 1)}>click me</button>
+      hi-m-react
+      <Foo />
+    </div>
+  )
+}
+
+export default App

@@ -1,4 +1,4 @@
-import { Fiber, Tag, transformVdomToFiber } from './fiber'
+import { EffectAction, EffectHook, Fiber, StateHook, Tag, UpdateAction, transformVdomToFiber } from './fiber'
 
 export type FunctionElementType = (props: PropsType) => VDOMElement
 export type ElementType = string | FunctionElementType
@@ -177,6 +177,7 @@ const commitRoot = (fiber: Fiber) => {
   // * 统一删除
   deletions.filter(Boolean).forEach(commitDeletion)
   commitWork(fiber.child)
+  commitEffectHook()
   // * 提交完成后， 设置为 null
   currentRoot = wipRoot
   wipRoot = null
@@ -224,10 +225,56 @@ const commitWork = (fiber: Fiber | null) => {
   commitWork(fiber.sibling)
 }
 
+const commitEffectHook = () => {
+  const run = (fiber: Fiber | null) => {
+    if (!fiber) {
+      return
+    }
+    if (!fiber.alternate) {
+      fiber.effectHooks.forEach((effectHook) => {
+        effectHook.cleanup = effectHook.callback()
+      })
+    } else {
+      if (fiber.effectHooks.length === 0) {
+        return
+      }
+      fiber.effectHooks.forEach((effectHook, index) => {
+        const { deps } = effectHook
+        const oldDeps = fiber.alternate!.effectHooks[index].deps
+        const isChanged = deps.some((dep, i) => dep !== oldDeps[i])
+        if (isChanged) {
+          effectHook.cleanup = effectHook.callback()
+        }
+      })
+    }
+    run(fiber.child)
+    run(fiber.sibling)
+  }
+
+  const runCleanup = (fiber: Fiber | null) => {
+    if (!fiber) {
+      return
+    }
+    fiber.alternate?.effectHooks.forEach((effectHook) => {
+      effectHook.cleanup?.()
+    })
+    runCleanup(fiber.child)
+    runCleanup(fiber.sibling)
+  }
+
+  runCleanup(wipRoot)
+  run(wipRoot)
+}
+
 const updateFunctionComponent = (fiber: Fiber) => {
   // * 将当前的 fiber 赋值给 wipFiber， 以便在 update 函数中，可以通过 wipFiber 拿到当前的 fiber
   wipFiber = fiber
+  // * 清除 hook 树组，来到下一个 FC 的 HOOK 了
+  stateHooks = []
+  effectHooks = []
+  stateHooksIndex = 0
   const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
+  debugger
   return children
 }
 const updateHostComponent = (fiber: Fiber) => {
@@ -296,11 +343,71 @@ export const update = () => {
   }
 }
 
+let stateHooks: StateHook[] = []
+let stateHooksIndex = 0
+export const useState = <T>(initial: T) => {
+  const currentFiber = wipFiber!
+  // * 找到 之前旧 fiber 的 hook state
+  const oldHook = currentFiber?.alternate?.stateHooks[stateHooksIndex] as StateHook<T>
+  const stateHook: StateHook<T> = {
+    state: oldHook ? oldHook.state : initial,
+    queue: oldHook ? oldHook.queue : [],
+  }
+
+  // * 批量更新 state
+  stateHook.queue.forEach((action) => {
+    stateHook.state = action(stateHook.state)
+  })
+  stateHook.queue = []
+
+  stateHooksIndex++
+  stateHooks.push(stateHook)
+
+  // * 更新为最新的 hook state
+  currentFiber.stateHooks = stateHooks
+
+  function setState(action: UpdateAction<T> | T) {
+
+    // * 如果没有传入的 action 执行后， state 没有发生改变，那么就不需要更新了，直接 return
+    const eagerState = typeof action === 'function' ? (action as UpdateAction<T>)(stateHook.state) : action
+    if (eagerState === stateHook.state) {
+      return
+    }
+
+    // * 先将 action 推入 queue 中，等待下一次更新时调用
+    stateHook.queue.push((typeof action === 'function' ? action : () => action) as UpdateAction<T>)
+    wipRoot = new Fiber({
+      ...currentFiber!,
+      dom: currentFiber!.dom,
+      props: currentFiber!.props,
+      alternate: currentFiber,
+    })
+
+    nextWorkOfUnit = wipRoot
+  }
+
+  return [stateHook.state, setState] as const
+}
+
+let effectHooks: EffectHook[] = []
+export const useEffect = (callback: EffectAction, deps: any[]) => {
+  const effectHook: EffectHook = {
+    callback,
+    deps,
+  }
+  effectHooks.push(effectHook)
+  wipFiber!.effectHooks = effectHooks
+}
+
+
+
 const React = {
   createElement,
   createText,
   render,
-  update
+  update,
+  useState,
+  useEffect
 }
 
 export default React
