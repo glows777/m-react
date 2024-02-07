@@ -18,6 +18,14 @@ export interface EffectHook {
   deps: any[]
   cleanup?: (() => void) | void
 }
+
+export type MemoAction = () => any
+export interface MemoHook {
+  callback: MemoAction
+  deps: any[]
+  value: any
+}
+
 export class Fiber {
   // * dom 节点类型
   type: ElementType = ''
@@ -34,7 +42,8 @@ export class Fiber {
   tag: Tag = Tag.PLACEMENT
   stateHooks: Array<StateHook>
   effectHooks: Array<EffectHook>
-  constructor({ type, parent, sibling, child, dom, props, alternate, tag, stateHooks, effectHooks }: Fiber) {
+  memoHooks: Array<MemoHook>
+  constructor({ type, parent, sibling, child, dom, props, alternate, tag, stateHooks, effectHooks, memoHooks }: Fiber) {
     this.type = type
     this.child = child
     this.sibling = sibling
@@ -45,6 +54,7 @@ export class Fiber {
     this.tag = tag
     this.stateHooks = stateHooks
     this.effectHooks = effectHooks
+    this.memoHooks = memoHooks
   }
 }
 
@@ -71,5 +81,6 @@ export function transformVdomToFiber(vdom: VDOMElement, dom: HTMLElement | Text 
     tag: Tag.PLACEMENT,
     stateHooks: [],
     effectHooks: [],
+    memoHooks: [],
   })
 }

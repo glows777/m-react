@@ -1,4 +1,4 @@
-import type { EffectAction, EffectHook, StateHook, UpdateAction } from './fiber'
+import type { EffectAction, EffectHook, MemoAction, MemoHook, StateHook, UpdateAction } from './fiber'
 import { Fiber, Tag, transformVdomToFiber } from './fiber'
 
 export type FunctionElementType = (props: PropsType) => VDOMElement
@@ -383,13 +383,49 @@ export function useEffect(callback: EffectAction, deps: any[]) {
   wipFiber!.effectHooks = effectHooks
 }
 
+let memoHooks: MemoHook[] = []
+let memoIndex = 0
+export function useMemo(callback: MemoAction, deps: any[]) {
+  const oldFiber = wipFiber?.alternate
+  let memoHook: MemoHook
+
+  if (!oldFiber) {
+    // * 直接执行
+    memoHook = {
+      callback,
+      deps,
+      value: callback(),
+    }
+  }
+  else {
+    const oldMemoHook = oldFiber.memoHooks[memoIndex]
+    const { deps: oldDeps } = oldMemoHook
+    const isChanged = deps.some((dep, index) => dep !== oldDeps[index])
+    // * 判断一下 deps 再执行
+    memoHook = isChanged
+      ? {
+          callback,
+          deps,
+          value: callback(),
+        }
+      : oldMemoHook
+  }
+  memoIndex++
+  memoHooks.push(memoHook)
+  wipFiber!.memoHooks = memoHooks
+
+  return memoHook.value
+}
+
 function updateFunctionComponent(fiber: Fiber) {
   // * 将当前的 fiber 赋值给 wipFiber， 以便在 update 函数中，可以通过 wipFiber 拿到当前的 fiber
   wipFiber = fiber
   // * 清除 hook 树组，来到下一个 FC 的 HOOK 了
   stateHooks = []
   effectHooks = []
+  memoHooks = []
   stateHooksIndex = 0
+  memoIndex = 0
   const children: ChildType[] = [(fiber.type as FunctionElementType)(fiber.props)]
   return children
 }
@@ -401,6 +437,7 @@ const React = {
   update,
   useState,
   useEffect,
+  useMemo,
 }
 
 export default React
