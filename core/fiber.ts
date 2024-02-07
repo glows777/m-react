@@ -1,21 +1,21 @@
-import { PropsType, VDOMElement, ElementType } from './react'
+import type { ElementType, PropsType, VDOMElement } from './react'
 
 export enum Tag {
   // * 创建阶段
   PLACEMENT = 'PLACEMENT',
   // * 更新阶段
-  UPDATE = 'UPDATE'
+  UPDATE = 'UPDATE',
 }
 
 export type UpdateAction<T> = (prev: T) => T
 export interface StateHook<T = any> {
-  state: T,
+  state: T
   queue: Array<UpdateAction<T>>
 }
 export type EffectAction = () => void | (() => void)
 export interface EffectHook {
   callback: EffectAction
-  deps: any[],
+  deps: any[]
   cleanup?: (() => void) | void
 }
 export class Fiber {
@@ -48,31 +48,28 @@ export class Fiber {
   }
 }
 
-export const transformFiberToVDom = (fiber: Fiber): VDOMElement => {
+export function transformFiberToVDom(fiber: Fiber): VDOMElement {
   return {
     type: fiber.type,
     props: {
-      children: fiber.props.children
+      children: fiber.props.children,
     },
   }
 }
 
-export const transformVdomToFiber = (
-  vdom: VDOMElement,
-  dom: HTMLElement | Text | null
-): Fiber => {
+export function transformVdomToFiber(vdom: VDOMElement, dom: HTMLElement | Text | null): Fiber {
   return new Fiber({
     type: vdom.type,
     // todo not sure that would this will trigger some error
     // todo waiting to test
     child: null,
-    dom: dom,
+    dom,
     sibling: null,
     parent: null,
     props: vdom.props,
     alternate: null,
     tag: Tag.PLACEMENT,
     stateHooks: [],
-    effectHooks: []
+    effectHooks: [],
   })
 }

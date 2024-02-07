@@ -24,7 +24,7 @@
 
 ### others
 
-- [ ] 🙋 a guide for this project which specify how this mini-react works (createElement, performWorkOfUnit, reconcile, commitRoot......) 
+- [ ] 🙋 a guide for this project which specify how this mini-react works (createElement, performWorkOfUnit, reconcile, commitRoot......)
     - this will open as issue for a better reading experience
 - [ ] 🤔 maybe this project needs a better way to organize code
 

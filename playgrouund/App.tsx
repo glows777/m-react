@@ -1,28 +1,29 @@
-import React, { useState, useEffect } from "../core/react"
+/* eslint-disable no-console */
+import React, { useEffect, useState } from '../core/react'
 
 function Foo() {
-  console.log("re foo")
+  console.log('re foo')
   const [count, setCount] = useState(10)
-  const [bar, setBar] = useState("bar")
+  const [bar, setBar] = useState('bar')
   function handleClick() {
-    setCount((c) => c + 1)
-    setBar(prev => prev + "bar")
+    setCount(c => c + 1)
+    setBar(prev => `${prev}bar`)
   }
 
   useEffect(() => {
-    console.log("effect foo")
+    console.log('effect foo')
     console.log(count)
     return () => {
-      console.log("unmount foo")
+      console.log('unmount foo')
     }
   }, [count])
 
   useEffect(() => {
-    console.log("effect bar")
+    console.log('effect bar')
     console.log(bar)
 
     return () => {
-      console.log("unmount bar")
+      console.log('unmount bar')
     }
   }, [bar])
 
@@ -49,7 +50,8 @@ function App() {
   }, [count])
   return (
     <div>
-      {count}<button onClick={() => setCount(prev => prev + 1)}>click me</button>
+      {count}
+      <button onClick={() => setCount(prev => prev + 1)}>click me</button>
       hi-m-react
       <Foo />
     </div>
